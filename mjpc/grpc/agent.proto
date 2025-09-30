@@ -57,6 +57,9 @@ service Agent {
 
   // A single method that can set many of the inputs.
   rpc SetAnything(SetAnythingRequest) returns (SetAnythingResponse);
+
+  // Get values from backwards pass
+  rpc GetBackwardPassResults(GetBackwardPassResultsRequest) returns (GetBackwardPassResultsResponse);
 }
 
 message MjModel {
@@ -224,3 +227,7 @@ message SetAnythingRequest {
 }
 
 message SetAnythingResponse {}
+
+message GetBackwardPassResultsRequest{}
+
+message GetBackwardPassResultsResponse{}
