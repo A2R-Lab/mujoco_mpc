@@ -9,13 +9,13 @@ from pathlib import Path
 from mujoco_mpc import agent as agent_lib
 import mujoco
 import gymnasium_robotics
+from gymnasium_robotics.utils.rotations import quat_mul
 
 if __name__ == "__main__":
-    """
-    TODO:
-    - How to randomize target orientation and position of the cube?
-    - How to randomize initial orientation and position of the cube? Does the gymnasium environment actually do that?
-    """
+    
+    # Seed for reproducibility
+    np.random.seed(0)
+    
     model_path = (
         Path(__file__).parent.parent.parent.parent.parent.parent
         / "mpc_rl/tasks/shadow_reorient/task.xml"
@@ -35,24 +35,23 @@ if __name__ == "__main__":
     agent = agent_lib.Agent(task_id="Shadow", model=model)
 
     weights = {
-        'In Hand': 20.0,
-        'Orientation': 5.0,
-        'Cube Vel.': 10.0,
-        'Actuator': 0.1,
-        'Grasp': 2.5,
-        'Joint Vel.': 1.0e-4,
+        'In Hand': 20.0,        # Distance b/w cube pos and palm pos
+        'Orientation': 10.0,    # Orientation err b/w cube and goal
+        'Cube Vel.': 10.0,      # Linear velocity of cube (penalizing fast movements)
+        'Actuator': 0.1,        # Control effort
+        'Grasp': 1.0,           # Deviation of hand joints from keyframe "gasp" config
+        'Joint Vel.': 1.0e-4,   # Angular velocities of hand joints
     }
     agent.set_cost_weights(weights)
     print("Cost weights:", agent.get_cost_weights())
 
-    # NOTE: This task does not have any parameters to set
     # task_params = {
     # }
     # agent.set_task_parameters(task_params)
     # print("Task params:", agent.get_task_parameters())
 
     # rollout horizon
-    T = 1000
+    T = 500
 
     # trajectories
     qpos = np.zeros((model.nq, T))
@@ -64,10 +63,79 @@ if __name__ == "__main__":
     cost_total = np.zeros(T-1)
     cost_terms = np.zeros((len(agent.get_cost_term_values()), T-1))
 
-    #
     # Rollout
-    #
     mujoco.mj_resetData(model, data)
+    
+    # Randomize manipulated cube's initial pose (following manipulate_block.py)
+    # Find the manipulated cube body and its qpos indices
+    cube_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "cube")
+    cube_jnt_addr = model.body_jntadr[cube_body_id]
+    cube_qpos_start = model.jnt_qposadr[cube_jnt_addr]
+    
+    # Randomize position: base position + Gaussian noise (mean=0, std=0.005)
+    base_pos = np.array([0.325, 0.0, 0.075])
+    pos_noise = np.random.normal(0, 0.005, size=3)
+    random_pos = base_pos + pos_noise
+    
+    # Randomize orientation: start with identity quat (1,0,0,0) + random rotation around random axis
+    random_angle = np.random.uniform(-np.pi, np.pi)
+    
+    # Select a random axis (x, y, or z)
+    axis_idx = np.random.randint(0, 3)
+    axis = np.zeros(3)
+    axis[axis_idx] = 1.0
+    
+    # Convert axis-angle to quaternion
+    half_angle = random_angle / 2
+    sin_half = np.sin(half_angle)
+    cube_init_quat = np.array([
+        np.cos(half_angle),       # w
+        axis[0] * sin_half,       # x
+        axis[1] * sin_half,       # y
+        axis[2] * sin_half        # z
+    ])
+    
+    # Set the randomized pose in qpos
+    data.qpos[cube_qpos_start:cube_qpos_start+3] = random_pos
+    data.qpos[cube_qpos_start+3:cube_qpos_start+7] = cube_init_quat
+    
+    # Randomize goal cube's orientation (following manipulate_block.py)
+    # The target orientation is obtained by adding a random offset to the initial cube orientation
+    goal_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "goal")
+    goal_jnt_addr = model.body_jntadr[goal_body_id]
+    goal_qpos_start = model.jnt_qposadr[goal_jnt_addr]
+    
+    # Sample orientation offset: random angle on a random axis
+    goal_angle_offset = np.random.uniform(-np.pi, np.pi)
+    goal_axis_idx = np.random.randint(0, 3)
+    goal_axis = np.zeros(3)
+    goal_axis[goal_axis_idx] = 1.0
+    
+    # Convert offset axis-angle to quaternion
+    half_offset = goal_angle_offset / 2
+    sin_half_offset = np.sin(half_offset)
+    offset_quat = np.array([
+        np.cos(half_offset),
+        goal_axis[0] * sin_half_offset,
+        goal_axis[1] * sin_half_offset,
+        goal_axis[2] * sin_half_offset
+    ])
+    
+    # Multiply quaternions: goal_quat = offset_quat * cube_init_quat
+    # This applies the offset rotation to the initial cube orientation
+    goal_quat = quat_mul(offset_quat, cube_init_quat)
+    data.qpos[goal_qpos_start:goal_qpos_start+4] = goal_quat
+    
+    # Forward kinematics to update both cubes
+    mujoco.mj_forward(model, data)
+    
+    print(f"Randomized cube initial pose:")
+    print(f"  Position: {random_pos}")
+    print(f"  Quaternion: {cube_init_quat}")
+    print(f"  Rotation axis: {['X', 'Y', 'Z'][axis_idx]}, angle: {random_angle:.3f} rad ({np.degrees(random_angle):.1f}°)")
+    print(f"Goal cube orientation:")
+    print(f"  Quaternion: {goal_quat}")
+    print(f"  Offset axis: {['X', 'Y', 'Z'][goal_axis_idx]}, offset angle: {goal_angle_offset:.3f} rad ({np.degrees(goal_angle_offset):.1f}°)")
 
     # cache init state
     qpos[:, 0] = data.qpos.copy()
@@ -172,132 +240,133 @@ if __name__ == "__main__":
     cube_euler = np.array([quat_to_euler(cube_quat[:, i]) for i in range(T)]).T
     goal_euler = np.array([quat_to_euler(goal_quat[:, i]) for i in range(T)]).T
     
-    # Plot 1: Cube Position Tracking
-    fig1 = plt.figure(figsize=(14, 8))
-    
-    plt.subplot(3, 1, 1)
-    plt.plot(time, cube_pos[0, :], label="Cube X", color="blue", linewidth=2)
-    plt.plot(time, goal_pos[0, :], label="Goal X", color="blue", linestyle='--', alpha=0.7)
-    plt.legend()
-    plt.ylabel("X Position (m)")
-    plt.grid(True)
-    plt.title("Cube Position Tracking")
-    
-    plt.subplot(3, 1, 2)
-    plt.plot(time, cube_pos[1, :], label="Cube Y", color="orange", linewidth=2)
-    plt.plot(time, goal_pos[1, :], label="Goal Y", color="orange", linestyle='--', alpha=0.7)
-    plt.legend()
-    plt.ylabel("Y Position (m)")
-    plt.grid(True)
-    
-    plt.subplot(3, 1, 3)
-    plt.plot(time, cube_pos[2, :], label="Cube Z", color="green", linewidth=2)
-    plt.plot(time, goal_pos[2, :], label="Goal Z", color="green", linestyle='--', alpha=0.7)
-    plt.legend()
-    plt.xlabel("Time (s)")
-    plt.ylabel("Z Position (m)")
-    plt.grid(True)
-    
-    plt.tight_layout()
-    
-    # Plot 2: Cube Orientation Tracking
-    fig2 = plt.figure(figsize=(14, 8))
-    
-    plt.subplot(3, 1, 1)
-    plt.plot(time, cube_euler[0, :], label="Cube Roll", color="red", linewidth=2)
-    plt.plot(time, goal_euler[0, :], label="Goal Roll", color="red", linestyle='--', alpha=0.7)
-    plt.legend()
-    plt.ylabel("Roll (rad)")
-    plt.grid(True)
-    plt.title("Cube Orientation Tracking")
-    
-    plt.subplot(3, 1, 2)
-    plt.plot(time, cube_euler[1, :], label="Cube Pitch", color="purple", linewidth=2)
-    plt.plot(time, goal_euler[1, :], label="Goal Pitch", color="purple", linestyle='--', alpha=0.7)
-    plt.legend()
-    plt.ylabel("Pitch (rad)")
-    plt.grid(True)
-    
-    plt.subplot(3, 1, 3)
-    plt.plot(time, cube_euler[2, :], label="Cube Yaw", color="brown", linewidth=2)
-    plt.plot(time, goal_euler[2, :], label="Goal Yaw", color="brown", linestyle='--', alpha=0.7)
-    plt.legend()
-    plt.xlabel("Time (s)")
-    plt.ylabel("Yaw (rad)")
-    plt.grid(True)
-    
-    plt.tight_layout()
-    
-    # Plot 3: Position and Orientation Errors
-    fig3 = plt.figure(figsize=(14, 6))
-    
-    # Compute errors
-    pos_error = np.linalg.norm(cube_pos - goal_pos, axis=0)
-    orient_error = np.linalg.norm(cube_euler - goal_euler, axis=0)
-    
-    plt.subplot(2, 1, 1)
-    plt.plot(time, pos_error, color="blue", linewidth=2)
-    plt.ylabel("Position Error (m)")
-    plt.grid(True)
-    plt.title("Cube Tracking Errors")
-    
-    plt.subplot(2, 1, 2)
-    plt.plot(time, orient_error, color="red", linewidth=2)
-    plt.xlabel("Time (s)")
-    plt.ylabel("Orientation Error (rad)")
-    plt.grid(True)
-    
-    plt.tight_layout()
-    
-    # Plot 4: Control Signals (20 actuators for Shadow Hand)
-    fig4 = plt.figure(figsize=(16, 10))
-    
-    # Shadow Hand has 20 actuators
-    actuator_names = [
-        "WRJ2 (wrist)", "WRJ1 (wrist)", 
-        "THJ5 (thumb)", "THJ4 (thumb)", "THJ3 (thumb)", "THJ2 (thumb)", "THJ1 (thumb)",
-        "FFJ4 (index)", "FFJ3 (index)", "FFJ0 (index)",
-        "MFJ4 (middle)", "MFJ3 (middle)", "MFJ0 (middle)",
-        "RFJ4 (ring)", "RFJ3 (ring)", "RFJ0 (ring)",
-        "LFJ5 (pinky)", "LFJ4 (pinky)", "LFJ3 (pinky)", "LFJ0 (pinky)"
-    ]
-    
-    for i in range(min(20, model.nu)):
-        plt.subplot(5, 4, i+1)
-        plt.plot(time[:-1], ctrl[i, :], linewidth=1.5)
-        plt.ylabel("Control")
-        if i < len(actuator_names):
-            plt.title(actuator_names[i], fontsize=8)
-        else:
-            plt.title(f"Actuator {i}", fontsize=8)
-        plt.grid(True, alpha=0.3)
-        if i >= 16:
-            plt.xlabel("Time (s)", fontsize=8)
-        plt.tick_params(labelsize=7)
-    
-    plt.suptitle("Shadow Hand Control Signals", fontsize=14, y=0.995)
-    plt.tight_layout()
-    
-    # Plot 5: Cost Terms
-    fig5 = plt.figure(figsize=(14, 6))
-    
-    # Get cost term names from shadow task
-    cost_names = list(agent.get_cost_term_values().keys())
-    colors_cost = ["blue", "orange", "green", "red", "purple", "brown"]
-    
-    for i, (name, color) in enumerate(zip(cost_names, colors_cost)):
-        if i < len(cost_terms):
-            plt.plot(time[:-1], cost_terms[i, :], label=name, color=color, alpha=0.7)
-    
-    plt.plot(time[:-1], cost_total, label="Total (weighted)", color="black", linewidth=2)
-    plt.legend(loc='upper right')
-    plt.xlabel("Time (s)")
-    plt.ylabel("Cost")
-    plt.title("Shadow Hand Manipulation Cost Terms")
-    plt.grid(True)
-    plt.tight_layout()
-    
-    plt.show()
+    if False:
+        # Plot 1: Cube Position Tracking
+        fig1 = plt.figure(figsize=(14, 8))
+        
+        plt.subplot(3, 1, 1)
+        plt.plot(time, cube_pos[0, :], label="Cube X", color="blue", linewidth=2)
+        plt.plot(time, goal_pos[0, :], label="Goal X", color="blue", linestyle='--', alpha=0.7)
+        plt.legend()
+        plt.ylabel("X Position (m)")
+        plt.grid(True)
+        plt.title("Cube Position Tracking")
+        
+        plt.subplot(3, 1, 2)
+        plt.plot(time, cube_pos[1, :], label="Cube Y", color="orange", linewidth=2)
+        plt.plot(time, goal_pos[1, :], label="Goal Y", color="orange", linestyle='--', alpha=0.7)
+        plt.legend()
+        plt.ylabel("Y Position (m)")
+        plt.grid(True)
+        
+        plt.subplot(3, 1, 3)
+        plt.plot(time, cube_pos[2, :], label="Cube Z", color="green", linewidth=2)
+        plt.plot(time, goal_pos[2, :], label="Goal Z", color="green", linestyle='--', alpha=0.7)
+        plt.legend()
+        plt.xlabel("Time (s)")
+        plt.ylabel("Z Position (m)")
+        plt.grid(True)
+        
+        plt.tight_layout()
+        
+        # Plot 2: Cube Orientation Tracking
+        fig2 = plt.figure(figsize=(14, 8))
+        
+        plt.subplot(3, 1, 1)
+        plt.plot(time, cube_euler[0, :], label="Cube Roll", color="red", linewidth=2)
+        plt.plot(time, goal_euler[0, :], label="Goal Roll", color="red", linestyle='--', alpha=0.7)
+        plt.legend()
+        plt.ylabel("Roll (rad)")
+        plt.grid(True)
+        plt.title("Cube Orientation Tracking")
+        
+        plt.subplot(3, 1, 2)
+        plt.plot(time, cube_euler[1, :], label="Cube Pitch", color="purple", linewidth=2)
+        plt.plot(time, goal_euler[1, :], label="Goal Pitch", color="purple", linestyle='--', alpha=0.7)
+        plt.legend()
+        plt.ylabel("Pitch (rad)")
+        plt.grid(True)
+        
+        plt.subplot(3, 1, 3)
+        plt.plot(time, cube_euler[2, :], label="Cube Yaw", color="brown", linewidth=2)
+        plt.plot(time, goal_euler[2, :], label="Goal Yaw", color="brown", linestyle='--', alpha=0.7)
+        plt.legend()
+        plt.xlabel("Time (s)")
+        plt.ylabel("Yaw (rad)")
+        plt.grid(True)
+        
+        plt.tight_layout()
+        
+        # Plot 3: Position and Orientation Errors
+        fig3 = plt.figure(figsize=(14, 6))
+        
+        # Compute errors
+        pos_error = np.linalg.norm(cube_pos - goal_pos, axis=0)
+        orient_error = np.linalg.norm(cube_euler - goal_euler, axis=0)
+        
+        plt.subplot(2, 1, 1)
+        plt.plot(time, pos_error, color="blue", linewidth=2)
+        plt.ylabel("Position Error (m)")
+        plt.grid(True)
+        plt.title("Cube Tracking Errors")
+        
+        plt.subplot(2, 1, 2)
+        plt.plot(time, orient_error, color="red", linewidth=2)
+        plt.xlabel("Time (s)")
+        plt.ylabel("Orientation Error (rad)")
+        plt.grid(True)
+        
+        plt.tight_layout()
+        
+        # Plot 4: Control Signals (20 actuators for Shadow Hand)
+        fig4 = plt.figure(figsize=(16, 10))
+        
+        # Shadow Hand has 20 actuators
+        actuator_names = [
+            "WRJ2 (wrist)", "WRJ1 (wrist)", 
+            "THJ5 (thumb)", "THJ4 (thumb)", "THJ3 (thumb)", "THJ2 (thumb)", "THJ1 (thumb)",
+            "FFJ4 (index)", "FFJ3 (index)", "FFJ0 (index)",
+            "MFJ4 (middle)", "MFJ3 (middle)", "MFJ0 (middle)",
+            "RFJ4 (ring)", "RFJ3 (ring)", "RFJ0 (ring)",
+            "LFJ5 (pinky)", "LFJ4 (pinky)", "LFJ3 (pinky)", "LFJ0 (pinky)"
+        ]
+        
+        for i in range(min(20, model.nu)):
+            plt.subplot(5, 4, i+1)
+            plt.plot(time[:-1], ctrl[i, :], linewidth=1.5)
+            plt.ylabel("Control")
+            if i < len(actuator_names):
+                plt.title(actuator_names[i], fontsize=8)
+            else:
+                plt.title(f"Actuator {i}", fontsize=8)
+            plt.grid(True, alpha=0.3)
+            if i >= 16:
+                plt.xlabel("Time (s)", fontsize=8)
+            plt.tick_params(labelsize=7)
+        
+        plt.suptitle("Shadow Hand Control Signals", fontsize=14, y=0.995)
+        plt.tight_layout()
+        
+        # Plot 5: Cost Terms
+        fig5 = plt.figure(figsize=(14, 6))
+        
+        # Get cost term names from shadow task
+        cost_names = list(agent.get_cost_term_values().keys())
+        colors_cost = ["blue", "orange", "green", "red", "purple", "brown"]
+        
+        for i, (name, color) in enumerate(zip(cost_names, colors_cost)):
+            if i < len(cost_terms):
+                plt.plot(time[:-1], cost_terms[i, :], label=name, color=color, alpha=0.7)
+        
+        plt.plot(time[:-1], cost_total, label="Total (weighted)", color="black", linewidth=2)
+        plt.legend(loc='upper right')
+        plt.xlabel("Time (s)")
+        plt.ylabel("Cost")
+        plt.title("Shadow Hand Manipulation Cost Terms")
+        plt.grid(True)
+        plt.tight_layout()
+        
+        plt.show()
     
     # Animate the frames
     print(f"\nCreating animation with {len(frames)} frames...")
