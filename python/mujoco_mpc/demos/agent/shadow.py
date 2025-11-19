@@ -14,7 +14,7 @@ from gymnasium_robotics.utils.rotations import quat_mul
 if __name__ == "__main__":
     
     # Seed for reproducibility
-    np.random.seed(0)
+    np.random.seed(42)
     
     model_path = (
         Path(__file__).parent.parent.parent.parent.parent.parent
@@ -208,10 +208,10 @@ if __name__ == "__main__":
     goal_qpos_start = model.jnt_qposadr[goal_qpos_addr]
     
     # Extract cube and goal trajectories
-    cube_pos = qpos[cube_qpos_start:cube_qpos_start+3, :]  # x, y, z
+    cube_pos = qpos[cube_qpos_start:cube_qpos_start+3, :]     # x, y, z
     cube_quat = qpos[cube_qpos_start+3:cube_qpos_start+7, :]  # w, x, y, z
     
-    goal_pos = qpos[goal_qpos_start:goal_qpos_start+3, :]  # x, y, z
+    goal_pos = qpos[goal_qpos_start:goal_qpos_start+3, :]     # x, y, z
     goal_quat = qpos[goal_qpos_start+3:goal_qpos_start+7, :]  # w, x, y, z
     
     # Convert quaternions to euler angles for easier interpretation
@@ -387,3 +387,34 @@ if __name__ == "__main__":
     print(f"Animation created at {display_fps:.1f} FPS (model timestep: {model.opt.timestep}s)")
     
     plt.show()
+    
+    # Calculate orientation error after animation is displayed
+    # Extract final cube orientation and goal orientation
+    cube_quat_final = cube_quat[:, -1]  # Final cube quaternion (w,x,y,z)
+    goal_quat_final = goal_quat[:, -1]  # Goal quaternion (should be constant, but use final)
+    
+    # Calculate quaternion error: q_error = goal_quat * conj(cube_quat_final)
+    cube_quat_final_conj = np.array([cube_quat_final[0], -cube_quat_final[1], 
+                                      -cube_quat_final[2], -cube_quat_final[3]])
+    q_error = quat_mul(goal_quat_final, cube_quat_final_conj)
+    
+    # Orientation error = 2 * arcsin(||vec(q_error)||)
+    orientation_error = 2.0 * np.arcsin(np.clip(np.linalg.norm(q_error[1:4]), 0, 1))
+    
+    # Define threshold (same as gen_traj_data.py default)
+    orientation_error_threshold = 0.5  # radians
+    
+    # Print result
+    print("\n" + "="*60)
+    print("ORIENTATION ERROR ANALYSIS")
+    print("="*60)
+    print(f"Final cube orientation:  [{cube_quat_final[0]:.4f}, {cube_quat_final[1]:.4f}, {cube_quat_final[2]:.4f}, {cube_quat_final[3]:.4f}]")
+    print(f"Goal orientation:        [{goal_quat_final[0]:.4f}, {goal_quat_final[1]:.4f}, {goal_quat_final[2]:.4f}, {goal_quat_final[3]:.4f}]")
+    print(f"Orientation error:       {orientation_error:.4f} rad ({np.degrees(orientation_error):.2f}°)")
+    print(f"Threshold:               {orientation_error_threshold:.4f} rad ({np.degrees(orientation_error_threshold):.2f}°)")
+    print()
+    if orientation_error < orientation_error_threshold:
+        print("SUCCESS: Orientation error is BELOW threshold!")
+    else:
+        print("FAILURE: Orientation error is ABOVE threshold")
+    print("="*60)
