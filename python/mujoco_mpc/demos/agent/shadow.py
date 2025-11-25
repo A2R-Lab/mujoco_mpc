@@ -10,11 +10,58 @@ from mujoco_mpc import agent as agent_lib
 import mujoco
 import gymnasium_robotics
 from gymnasium_robotics.utils.rotations import quat_mul
+import argparse
+
+
+def generate_filename_shadow(cube_quat, goal_quat, rollout_horizon):
+    """
+    Generate filename for Shadow Hand trajectories from cube and goal orientations.
+    Format: cube_[w,x,y,z]_goal_[w,x,y,z]_rh_XXXXX.npz
+    Quaternion values are rounded to 2 decimal places.
+    
+    Args:
+        cube_quat: Initial cube orientation quaternion (w,x,y,z)
+        goal_quat: Goal cube orientation quaternion (w,x,y,z)
+        rollout_horizon: Trajectory length
+    """
+    cube_str = ",".join([f"{q:.2f}" for q in cube_quat])
+    goal_str = ",".join([f"{q:.2f}" for q in goal_quat])
+    filename = f"cube_[{cube_str}]_goal_[{goal_str}]_rh_{rollout_horizon}.npz"
+    return filename
+
 
 if __name__ == "__main__":
     
+    parser = argparse.ArgumentParser(
+        description="Generate single Shadow Hand MPC trajectory",
+        epilog="""
+Examples:
+  # Basic usage (default seed 42)
+  python shadow.py
+  
+  # With custom seed for reproducibility
+  python shadow.py --seed 123
+  
+  # Save trajectory without visualization
+  python shadow.py --seed 456 --no-plot --no-animate
+  
+  # Custom output directory
+  python shadow.py --output-dir /path/to/output
+  
+Note: The random seed ensures reproducible initial states (cube/goal poses),
+but MPC trajectories may have slight numerical variations due to iterative optimization.
+        """
+    )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--output-dir", type=str, default=None, 
+                        help="Output directory (default: ../../data/shadow_hand_<dt>/)")
+    parser.add_argument("--no-save", action="store_true", help="Skip saving trajectory")
+    parser.add_argument("--no-plot", action="store_true", help="Skip plotting")
+    parser.add_argument("--no-animate", action="store_true", help="Skip animation")
+    args = parser.parse_args()
+    
     # Seed for reproducibility
-    np.random.seed(42)
+    np.random.seed(args.seed)
     
     model_path = (
         Path(__file__).parent.parent.parent.parent.parent.parent
@@ -31,6 +78,17 @@ if __name__ == "__main__":
     renderer.enable_depth_rendering = False
     camera_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, "sideon")
     print(f"Using camera: {camera_id}")
+
+    # Set output directory
+    if args.output_dir is None:
+        dt = model.opt.timestep
+        output_dir = Path(__file__).parent.parent.parent.parent.parent.parent / f"data/shadow_hand_{dt:.3f}dt".replace(".", "_")
+    else:
+        output_dir = Path(args.output_dir)
+    
+    if not args.no_save:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Output directory: {output_dir}")
 
     agent = agent_lib.Agent(task_id="Shadow", model=model)
 
@@ -66,6 +124,9 @@ if __name__ == "__main__":
     # Rollout
     mujoco.mj_resetData(model, data)
     
+    # Use a local RNG for reproducibility (doesn't affect global np.random state after this point)
+    rng = np.random.RandomState(args.seed)
+    
     # Randomize manipulated cube's initial pose (following manipulate_block.py)
     # Find the manipulated cube body and its qpos indices
     cube_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "cube")
@@ -74,14 +135,14 @@ if __name__ == "__main__":
     
     # Randomize position: base position + Gaussian noise (mean=0, std=0.005)
     base_pos = np.array([0.325, 0.0, 0.075])
-    pos_noise = np.random.normal(0, 0.005, size=3)
+    pos_noise = rng.normal(0, 0.005, size=3)
     random_pos = base_pos + pos_noise
     
     # Randomize orientation: start with identity quat (1,0,0,0) + random rotation around random axis
-    random_angle = np.random.uniform(-np.pi, np.pi)
+    random_angle = rng.uniform(-np.pi, np.pi)
     
     # Select a random axis (x, y, or z)
-    axis_idx = np.random.randint(0, 3)
+    axis_idx = rng.randint(0, 3)
     axis = np.zeros(3)
     axis[axis_idx] = 1.0
     
@@ -106,8 +167,8 @@ if __name__ == "__main__":
     goal_qpos_start = model.jnt_qposadr[goal_jnt_addr]
     
     # Sample orientation offset: random angle on a random axis
-    goal_angle_offset = np.random.uniform(-np.pi, np.pi)
-    goal_axis_idx = np.random.randint(0, 3)
+    goal_angle_offset = rng.uniform(-np.pi, np.pi)
+    goal_axis_idx = rng.randint(0, 3)
     goal_axis = np.zeros(3)
     goal_axis[goal_axis_idx] = 1.0
     
@@ -191,8 +252,31 @@ if __name__ == "__main__":
     
     agent.reset()
     
+    # Save trajectory
+    if not args.no_save:
+        print("\nSaving trajectory...")
+        
+        # Generate filename using cube and goal quaternions
+        filename = generate_filename_shadow(cube_init_quat, goal_quat, T)
+        filepath = output_dir / filename
+        
+        np.savez_compressed(
+            filepath,
+            qpos=qpos,
+            qvel=qvel,
+            ctrl=ctrl,
+            time=time,
+            cost_total=cost_total,
+            cost_terms=cost_terms,
+            init_qpos=qpos[:, 0],
+            init_qvel=qvel[:, 0]
+        )
+        
+        print(f"Trajectory saved to: {filepath}")
+    
     # Plot trajectories
-    print("\nPlotting trajectories...")
+    if not args.no_plot:
+        print("\nPlotting trajectories...")
     
     # Find cube body ID to extract its state
     cube_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "cube")
@@ -240,7 +324,7 @@ if __name__ == "__main__":
     cube_euler = np.array([quat_to_euler(cube_quat[:, i]) for i in range(T)]).T
     goal_euler = np.array([quat_to_euler(goal_quat[:, i]) for i in range(T)]).T
     
-    if False:
+    if not args.no_plot:
         # Plot 1: Cube Position Tracking
         fig1 = plt.figure(figsize=(14, 8))
         
@@ -369,24 +453,25 @@ if __name__ == "__main__":
         plt.show()
     
     # Animate the frames
-    print(f"\nCreating animation with {len(frames)} frames...")
-    fig_anim = plt.figure(figsize=(10, 6))
-    img = plt.imshow(frames[0])
-    plt.axis('off')
-    plt.title("Walker MPC Rollout")
-    
-    def animate(i):
-        img.set_data(frames[i])
-        return [img]
-    
-    # Display at real-time speed based on model timestep
-    display_fps = 1.0 / model.opt.timestep
-    
-    anim = animation.FuncAnimation(fig_anim, animate, frames=len(frames), 
-                                   interval=1000/display_fps, blit=True, repeat=True)
-    print(f"Animation created at {display_fps:.1f} FPS (model timestep: {model.opt.timestep}s)")
-    
-    plt.show()
+    if not args.no_animate:
+        print(f"\nCreating animation with {len(frames)} frames...")
+        fig_anim = plt.figure(figsize=(10, 6))
+        img = plt.imshow(frames[0])
+        plt.axis('off')
+        plt.title("Shadow Hand MPC Rollout")
+        
+        def animate(i):
+            img.set_data(frames[i])
+            return [img]
+        
+        # Display at real-time speed based on model timestep
+        display_fps = 1.0 / model.opt.timestep
+        
+        anim = animation.FuncAnimation(fig_anim, animate, frames=len(frames), 
+                                       interval=1000/display_fps, blit=True, repeat=True)
+        print(f"Animation created at {display_fps:.1f} FPS (model timestep: {model.opt.timestep}s)")
+        
+        plt.show()
     
     # Calculate orientation error after animation is displayed
     # Extract final cube orientation and goal orientation
