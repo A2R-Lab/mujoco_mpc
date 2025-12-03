@@ -48,6 +48,39 @@ if __name__ == "__main__":
     agent.set_task_parameters(task_params)
     print("Task params:", agent.get_task_parameters())
 
+    # Print model information - masses and damping
+    print("\n" + "="*60)
+    print("MODEL INFORMATION")
+    print("="*60)
+    
+    # Print body masses
+    print("\nBody Masses:")
+    for i in range(model.nbody):
+        body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, i)
+        if body_name:  # Skip world body
+            mass = model.body_mass[i]
+            print(f"  {body_name}: {mass:.4f} kg")
+    
+    # Print joint damping
+    print("\nJoint Damping:")
+    for i in range(model.njnt):
+        joint_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+        damping = model.dof_damping[model.jnt_dofadr[i]]
+        print(f"  {joint_name}: {damping:.4f}")
+    
+    # Print geom masses (these contribute to body mass)
+    print("\nGeom Masses (contributes to body mass):")
+    for i in range(model.ngeom):
+        geom_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, i)
+        body_id = model.geom_bodyid[i]
+        body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
+        # Get geom mass from model
+        # Note: geom masses are not directly stored in mjModel after compilation
+        # They are used to compute body masses during compilation
+        print(f"  {geom_name} (body: {body_name})")
+    
+    print("="*60 + "\n")
+
     # rollout horizon
     T = 1000
 
