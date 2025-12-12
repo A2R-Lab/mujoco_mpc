@@ -81,7 +81,9 @@
   </default>
 
   <!-- modified from: https://github.com/google-deepmind/mujoco_menagerie/tree/main/unitree_a1 -->
-  <include file="go2_modified.xml" />
+  <include file="a1_modified.xml" />
+  <!-- <include file="go2_modified.xml" /> -->
+  <!-- <include file="go2_identified.xml" /> -->
 
   <actuator>
     <general class="torque" name="FR_hip" joint="FR_hip_joint"/>
