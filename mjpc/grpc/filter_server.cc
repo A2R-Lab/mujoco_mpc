@@ -43,7 +43,8 @@ int main(int argc, char** argv) {
   builder.AddListeningPort(server_address, server_credentials);
 
   filter_grpc::FilterService service;
-  builder.SetMaxReceiveMessageSize(40 * 1024 * 1024);
+  builder.SetMaxReceiveMessageSize(100 * 1024 * 1024); // 100 MB
+  builder.SetMaxSendMessageSize(100 * 1024 * 1024); // 100 MB
   builder.RegisterService(&service);
 
   std::unique_ptr<grpc::Server> server(builder.BuildAndStart());

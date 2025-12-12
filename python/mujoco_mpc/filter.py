@@ -80,7 +80,12 @@ class Filter:
     atexit.register(self.server_process.kill)
 
     credentials = grpc.local_channel_credentials(grpc.LocalConnectionType.LOCAL_TCP)
-    self.channel = grpc.secure_channel(f"localhost:{self.port}", credentials)
+    # Set channel options for larger message sizes (100 MB)
+    options = [
+        ('grpc.max_send_message_length', 100 * 1024 * 1024),
+        ('grpc.max_receive_message_length', 100 * 1024 * 1024),
+    ]
+    self.channel = grpc.secure_channel(f"localhost:{self.port}", credentials, options=options)
     grpc.channel_ready_future(self.channel).result(timeout=10)
     self.stub = filter_pb2_grpc.StateEstimationStub(self.channel)
 
