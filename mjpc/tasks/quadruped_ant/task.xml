@@ -1,0 +1,42 @@
+<mujoco model="Quadruped Ant Walk">
+  <include file="../common.xml"/>
+
+  <size memory="1M"/>
+
+  <custom>
+    <!-- agent -->
+    <!-- agent_planner: 0=Sampling, 1=Gradient, 2=iLQG, 3=iLQS, 4=Robust Sampling, 5=Cross Entropy, 6=Sample Gradient -->
+    <numeric name="agent_planner" data="3" />
+    <numeric name="agent_horizon" data="0.8" />
+    <numeric name="agent_timestep" data="0.01" />
+    <numeric name="sampling_spline_points" data="3" />
+    <numeric name="sampling_trajectories" data="60" />
+    <numeric name="sampling_exploration" data="0.5" />
+    <numeric name="gradient_spline_points" data="8" />
+
+    <!-- residual -->
+    <numeric name="residual_Walk Speed" data="1.0 0.0 5.0" />
+
+    <!-- estimator -->
+    <numeric name="estimator" data="0" />
+  </custom>
+
+  <sensor>
+    <!-- cost -->
+    <user name="Control" dim="12" user="0 0.3 0.0 1.0" />
+    <user name="Upright" dim="1" user="8 50.0 0.0 50.0 0.05" />
+    <user name="Speed" dim="1" user="8 10.0 0.0 20.0 0.05" />
+    <user name="Lateral Velocity" dim="2" user="0 5.0 0.0 10.0" />
+    <user name="Joint Velocity" dim="16" user="0 0.05 0.0 0.1" />
+    <user name="Posture" dim="16" user="0 0.15 0.0 0.1" />
+
+    <!-- trace -->
+    <framepos name="trace0" objtype="site" objname="torso"/>
+
+    <!-- residual -->
+    <framezaxis name="torso_zaxis" objtype="xbody" objname="torso"/>
+  </sensor>
+
+  <!-- modified from: https://github.com/google-deepmind/dm_control/blob/main/dm_control/suite/quadruped.xml -->
+  <include file="quadruped_ant_modified.xml" />
+</mujoco>

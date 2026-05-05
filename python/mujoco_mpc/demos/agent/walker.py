@@ -15,7 +15,7 @@ if __name__ == "__main__":
     instead of going through the MPCPlanner
     """
     model_path = (
-        Path(__file__).parent.parent.parent.parent.parent.parent
+        Path(__file__).parent.parent.parent.parent.parent.parent.parent
         / "mpc_rl/tasks/walker/task.xml"
     )
     model = mujoco.MjModel.from_xml_path(str(model_path))

@@ -24,6 +24,7 @@
 #include "mjpc/tasks/bimanual/insert/insert.h"
 #include "mjpc/tasks/bimanual/reorient/reorient.h"
 #include "mjpc/tasks/cartpole/cartpole.h"
+#include "mjpc/tasks/cheetah/cheetah.h"
 #include "mjpc/tasks/fingers/fingers.h"
 #include "mjpc/tasks/humanoid/interact/interact.h"
 #include "mjpc/tasks/humanoid/stand/stand.h"
@@ -35,6 +36,7 @@
 #include "mjpc/tasks/panda/panda.h"
 #include "mjpc/tasks/particle/particle.h"
 #include "mjpc/tasks/quadrotor/quadrotor.h"
+#include "mjpc/tasks/quadruped_ant/quadruped_ant.h"
 #include "mjpc/tasks/quadruped/quadruped.h"
 #include "mjpc/tasks/rubik/solve.h"
 #include "mjpc/tasks/shadow_reorient/hand.h"
@@ -51,6 +53,7 @@ std::vector<std::shared_ptr<Task>> GetTasks() {
       std::make_shared<aloha::Insert>(),
       std::make_shared<aloha::Reorient>(),
       std::make_shared<Cartpole>(),
+      std::make_shared<Cheetah>(),
       std::make_shared<Fingers>(),
       std::make_shared<humanoid::Interact>(),
       std::make_shared<humanoid::Stand>(),
@@ -65,6 +68,7 @@ std::vector<std::shared_ptr<Task>> GetTasks() {
       std::make_shared<Rubik>(),
       std::make_shared<ShadowReorient>(),
       std::make_shared<Quadrotor>(),
+      std::make_shared<QuadrupedAnt>(),
       std::make_shared<QuadrupedFlat>(),
       std::make_shared<QuadrupedHill>(),
       std::make_shared<Swimmer>(),

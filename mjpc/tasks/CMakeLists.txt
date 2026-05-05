@@ -32,6 +32,13 @@ add_custom_target(
   COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/cartpole/cartpole_modified.xml
           ${CMAKE_CURRENT_BINARY_DIR}/cartpole/cartpole.xml
           <${CMAKE_CURRENT_SOURCE_DIR}/cartpole/cartpole.xml.patch
+  # cheetah
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${dm_control_SOURCE_DIR}/dm_control/suite/cheetah.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/cheetah/cheetah.xml
+  COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/cheetah/cheetah_modified.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/cheetah/cheetah.xml
+          <${CMAKE_CURRENT_SOURCE_DIR}/cheetah/cheetah.xml.patch
   # humanoid
   COMMAND ${CMAKE_COMMAND} -E copy
           ${dm_control_SOURCE_DIR}/dm_control/suite/humanoid.xml
@@ -46,6 +53,13 @@ add_custom_target(
   COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/particle/particle_modified.xml
           ${CMAKE_CURRENT_BINARY_DIR}/particle/particle.xml
           <${CMAKE_CURRENT_SOURCE_DIR}/particle/particle.xml.patch
+  # quadruped_ant
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${dm_control_SOURCE_DIR}/dm_control/suite/quadruped.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/quadruped_ant/quadruped_ant.xml
+  COMMAND patch -o ${CMAKE_CURRENT_BINARY_DIR}/quadruped_ant/quadruped_ant_modified.xml
+          ${CMAKE_CURRENT_BINARY_DIR}/quadruped_ant/quadruped_ant.xml
+          <${CMAKE_CURRENT_SOURCE_DIR}/quadruped_ant/quadruped_ant.xml.patch
   # swimmer
   COMMAND ${CMAKE_COMMAND} -E copy
           ${dm_control_SOURCE_DIR}/dm_control/suite/swimmer.xml

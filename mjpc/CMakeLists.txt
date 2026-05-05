@@ -48,6 +48,8 @@ add_library(
   tasks/bimanual/reorient/reorient.h
   tasks/cartpole/cartpole.cc
   tasks/cartpole/cartpole.h
+  tasks/cheetah/cheetah.cc
+  tasks/cheetah/cheetah.h
   tasks/fingers/fingers.cc
   tasks/fingers/fingers.h
   tasks/humanoid/interact/interact.cc
@@ -78,6 +80,8 @@ add_library(
   tasks/shadow_reorient/hand.h
   tasks/quadrotor/quadrotor.cc
   tasks/quadrotor/quadrotor.h
+  tasks/quadruped_ant/quadruped_ant.cc
+  tasks/quadruped_ant/quadruped_ant.h
   tasks/quadruped/quadruped.cc
   tasks/quadruped/quadruped.h
   tasks/swimmer/swimmer.cc

@@ -1,0 +1,70 @@
+diff --git a/quadruped_ant_modified.xml b/quadruped_ant_modified.xml
+--- a/quadruped_ant_modified.xml
++++ b/quadruped_ant_modified.xml
+@@ -1,8 +1,4 @@
+-<mujoco model="quadruped">
+-
+-  <include file="./common/skybox.xml"/>
+-  <include file="./common/visual.xml"/>
+-  <include file="./common/materials.xml"/>
++<mujoco model="Quadruped Ant">
+ 
+   <visual>
+     <rgba rangefinder="1 1 0.1 0.1"/>
+@@ -69,14 +65,7 @@
+ 
+ 
+   <worldbody>
+-    <geom name="floor" type="plane" size="15 15 .5" material="grid"/>
+-    <geom name="wall_px" class="wall" pos="-15.7 0 .7" zaxis="1 0 1"  size="1 15 .5"/>
+-    <geom name="wall_py" class="wall" pos="0 -15.7 .7" zaxis="0 1 1"  size="15 1 .5"/>
+-    <geom name="wall_nx" class="wall" pos="15.7 0 .7" zaxis="-1 0 1"  size="1 15 .5"/>
+-    <geom name="wall_ny" class="wall" pos="0 15.7 .7" zaxis="0 -1 1"  size="15 1 .5"/>
+-    <site name="target" type="cylinder" size=".4 .06" pos="0 0 .05" material="target"/>
+-
+-    <geom name="terrain" type="hfield" hfield="terrain" rgba=".2 .3 .4 1" pos="0 0 -.01"/>
++    <geom name="floor" type="plane" size="100 100 .5" material="blue_grid"/>
+ 
+     <camera name="global"  pos="-10 10 10" xyaxes="-1 -1 0 1 0 1" mode="trackcom"/>
+     <body name="torso" childclass="body" pos="0 0 .57">
+@@ -202,13 +191,6 @@
+         </body>
+       </body>
+     </body>
+-
+-    <body name="ball" pos="0 0 3">
+-      <freejoint name="ball_root"/>
+-      <geom name="ball" size=".15" material="ball" priority="1" condim="6" friction=".7 .005 .005"
+-            solref="-10000 -30"/>
+-      <light name="ball_light" pos="0 0 4" mode="trackcom"/>
+-    </body>
+ 
+   </worldbody>
+ 
+@@ -306,26 +288,6 @@
+     <torque name="torque_toe_back_right" site="toe_back_right"/>
+     <torque name="torque_toe_back_left" site="toe_back_left"/>
+     <subtreecom name="center_of_mass" body="torso"/>
+-    <rangefinder name="rf_00" site="rf_00"/>
+-    <rangefinder name="rf_01" site="rf_01"/>
+-    <rangefinder name="rf_02" site="rf_02"/>
+-    <rangefinder name="rf_03" site="rf_03"/>
+-    <rangefinder name="rf_04" site="rf_04"/>
+-    <rangefinder name="rf_10" site="rf_10"/>
+-    <rangefinder name="rf_11" site="rf_11"/>
+-    <rangefinder name="rf_12" site="rf_12"/>
+-    <rangefinder name="rf_13" site="rf_13"/>
+-    <rangefinder name="rf_14" site="rf_14"/>
+-    <rangefinder name="rf_20" site="rf_20"/>
+-    <rangefinder name="rf_21" site="rf_21"/>
+-    <rangefinder name="rf_22" site="rf_22"/>
+-    <rangefinder name="rf_23" site="rf_23"/>
+-    <rangefinder name="rf_24" site="rf_24"/>
+-    <rangefinder name="rf_30" site="rf_30"/>
+-    <rangefinder name="rf_31" site="rf_31"/>
+-    <rangefinder name="rf_32" site="rf_32"/>
+-    <rangefinder name="rf_33" site="rf_33"/>
+-    <rangefinder name="rf_34" site="rf_34"/>
+   </sensor>
+ 
+ </mujoco>
